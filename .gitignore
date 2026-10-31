@@ -1,0 +1,4 @@
+.work/
+.output/
+.DS_Store
+*.log

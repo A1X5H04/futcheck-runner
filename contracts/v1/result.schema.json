@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://futcheck.com/runner/contracts/v1/result.schema.json",
+  "title": "Futcheck Runner Result Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "jobId", "action", "actionVersion", "status", "output", "execution"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "jobId": { "type": "string" },
+    "action": { "type": "string" },
+    "actionVersion": { "type": "string" },
+    "status": { "enum": ["completed", "failed"] },
+    "output": {
+      "type": "object",
+      "required": ["files"],
+      "properties": {
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path", "format", "bytes", "sha256"],
+            "properties": {
+              "path": { "type": "string" },
+              "format": { "type": "string" },
+              "width": { "type": "integer", "minimum": 1 },
+              "height": { "type": "integer", "minimum": 1 },
+              "bytes": { "type": "integer", "minimum": 0 },
+              "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "execution": {
+      "type": "object",
+      "required": ["startedAt", "completedAt", "durationMs"],
+      "properties": {
+        "startedAt": { "type": "string", "format": "date-time" },
+        "completedAt": { "type": "string", "format": "date-time" },
+        "durationMs": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "renderer": { "type": "object" },
+    "error": {
+      "type": "object",
+      "required": ["code", "message"],
+      "properties": {
+        "code": { "type": "string" },
+        "message": { "type": "string" },
+        "exitCode": { "type": "integer" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "failed" } } },
+      "then": { "required": ["error"] }
+    }
+  ]
+}

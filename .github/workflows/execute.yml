@@ -1,0 +1,45 @@
+name: Futcheck Runner
+
+on:
+  workflow_dispatch:
+    inputs:
+      job_json:
+        description: Complete job JSON for small jobs and testing. Use job_id for stored jobs.
+        required: false
+        type: string
+      job_id:
+        description: ID of a stored job to retrieve from the configured Futcheck job API.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  execute:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out Futcheck Runner
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Execute action
+        env:
+          FUTCHECK_JOB_JSON: ${{ inputs.job_json }}
+          FUTCHECK_JOB_ID: ${{ inputs.job_id }}
+          FUTCHECK_JOB_API_URL: ${{ vars.FUTCHECK_JOB_API_URL }}
+          FUTCHECK_JOB_TOKEN: ${{ secrets.FUTCHECK_JOB_TOKEN }}
+          FUTCHECK_ALLOWED_JOB_HOSTS: ${{ vars.FUTCHECK_ALLOWED_JOB_HOSTS }}
+          FUTCHECK_WORK_DIR: ${{ runner.temp }}/futcheck-work
+        run: ./adapters/github/execute.sh
+
+      - name: Upload execution output
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: futcheck-runner-output-${{ github.run_id }}
+          path: ${{ runner.temp }}/futcheck-work/output/
+          if-no-files-found: ignore
+          retention-days: 7

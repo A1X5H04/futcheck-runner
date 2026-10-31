@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "jobId": "example-playwright-001",
+  "action": "template-image.render",
+  "actionVersion": "1.0.0",
+  "payload": {
+    "renderer": "playwright",
+    "template": "feature-announcement",
+    "data": {
+      "eyebrow": "NEW FEATURE",
+      "title": "Meet FUT Lens",
+      "subtitle": "Check player prices instantly.",
+      "accentColor": "#B6F23A"
+    },
+    "output": {
+      "path": "post.png",
+      "width": 1080,
+      "height": 1350,
+      "format": "png"
+    }
+  }
+}

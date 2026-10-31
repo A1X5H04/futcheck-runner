@@ -1,0 +1,6 @@
+.git
+.github
+.work
+.output
+**/tests
+**/README.md
