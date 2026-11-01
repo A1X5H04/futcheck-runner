@@ -2,10 +2,11 @@ FROM mcr.microsoft.com/playwright:v1.64.1-noble
 
 ENV ACTION_RENDERER=playwright \
     HOME=/tmp \
-    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
+    PLAYWRIGHT_VERSION=1.64.1
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends jq \
+    && apt-get install -y --no-install-recommends jq python3 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /action

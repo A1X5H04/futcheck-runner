@@ -1,1 +1,1 @@
-Add licensed .ttf or .otf font files here. The SVG Docker image passes this directory to resvg. Do not commit fonts unless their license permits redistribution.
+Place licensed .ttf or .otf files here. The SVG renderer loads fonts from this directory.

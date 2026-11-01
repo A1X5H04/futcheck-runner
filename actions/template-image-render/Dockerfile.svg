@@ -1,14 +1,13 @@
 FROM debian:bookworm-slim
 
 ARG TARGETARCH
-ENV RESVG_VERSION=0.49.0
-
+ARG RESVG_VERSION=0.49.0
 ENV ACTION_RENDERER=svg \
     HOME=/tmp \
     LANG=C.UTF-8
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl jq fonts-dejavu-core \
+    && apt-get install -y --no-install-recommends ca-certificates curl jq python3 fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 RUN set -eux; \
