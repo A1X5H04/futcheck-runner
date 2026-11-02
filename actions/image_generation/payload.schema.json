@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://futcheck.com/runner/actions/image_generation/payload.schema.json",
+  "title": "Template-to-Image Render Payload",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["template", "data", "output"],
+  "properties": {
+    "renderer": {
+      "type": "string",
+      "enum": ["svg", "playwright"],
+      "default": "svg",
+      "description": "SVG uses native resvg. Playwright is an explicit HTML rendering option."
+    },
+    "template": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+    },
+    "fitMode": {
+      "type": "string",
+      "enum": ["contain", "cover", "stretch"],
+      "default": "contain",
+      "description": "SVG only. contain preserves all content, cover fills and crops, stretch changes the aspect ratio."
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "subtitle"],
+      "properties": {
+        "eyebrow": { "type": "string", "maxLength": 80 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "subtitle": { "type": "string", "maxLength": 240 },
+        "accentColor": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$", "default": "#B6F23A" }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height", "format"],
+      "properties": {
+        "path": { "type": "string", "default": "post.png", "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]*\\.png$" },
+        "width": { "type": "integer", "minimum": 64, "maximum": 4096 },
+        "height": { "type": "integer", "minimum": 64, "maximum": 4096 },
+        "format": { "const": "png" }
+      }
+    }
+  }
+}

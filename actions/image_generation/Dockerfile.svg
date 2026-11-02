@@ -1,0 +1,34 @@
+FROM debian:bookworm-slim
+
+ARG TARGETARCH
+ARG RESVG_VERSION=0.49.0
+ENV ACTION_RENDERER=svg \
+    HOME=/tmp \
+    LANG=C.UTF-8
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl jq python3 fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN set -eux; \
+    case "${TARGETARCH:-amd64}" in \
+      amd64) RESVG_ARCH="x86_64"; RESVG_SHA256="216637e75e909e53e3098b0875cd5f7da2fdc8b4359771b4a29b539afff9d3f5" ;; \
+      arm64) RESVG_ARCH="aarch64"; RESVG_SHA256="00356cb6984836d7638fe10597a01ec4776b0c356e164538f165eca067f0d982" ;; \
+      *) echo "Unsupported target architecture: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    curl --fail --location --retry 3 --output /tmp/resvg.tar.gz \
+      "https://github.com/linebender/resvg/releases/download/v${RESVG_VERSION}/resvg-linux-${RESVG_ARCH}.tar.gz"; \
+    echo "${RESVG_SHA256}  /tmp/resvg.tar.gz" | sha256sum --check -; \
+    mkdir -p /tmp/resvg-unpack; \
+    tar -xzf /tmp/resvg.tar.gz -C /tmp/resvg-unpack; \
+    RESVG_BIN="$(find /tmp/resvg-unpack -type f -name resvg -print -quit)"; \
+    test -n "${RESVG_BIN}"; \
+    install -m 0755 "${RESVG_BIN}" /usr/local/bin/resvg; \
+    rm -rf /tmp/resvg.tar.gz /tmp/resvg-unpack; \
+    resvg --version
+
+WORKDIR /action
+COPY . /action
+RUN chmod +x /action/entrypoint.sh /action/src/render-svg.sh
+
+ENTRYPOINT ["/action/entrypoint.sh"]

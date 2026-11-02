@@ -1,0 +1,42 @@
+{
+  "$schema": "../../contracts/v1/action.schema.json",
+  "schemaVersion": 1,
+  "id": "image_generation",
+  "version": "1.0.0",
+  "name": "Template Image Renderer",
+  "description": "Converts trusted local SVG or HTML templates into PNG files. It does not generate image content.",
+  "execution": {
+    "entrypoint": "entrypoint.sh",
+    "selector": "payload.renderer",
+    "defaultVariant": "svg",
+    "variants": {
+      "svg": {
+        "dockerfile": "Dockerfile.svg",
+        "resources": {
+          "memory": "512m",
+          "cpus": 1,
+          "network": false,
+          "shmSize": "64m"
+        }
+      },
+      "playwright": {
+        "dockerfile": "Dockerfile.playwright",
+        "resources": {
+          "memory": "2g",
+          "cpus": 2,
+          "network": false,
+          "shmSize": "512m"
+        }
+      }
+    }
+  },
+  "input": {
+    "payloadSchema": "payload.schema.json",
+    "jobFile": "/work/job.json",
+    "directory": "/work/input"
+  },
+  "output": {
+    "directory": "/work/output",
+    "manifest": "manifest.json"
+  }
+}
