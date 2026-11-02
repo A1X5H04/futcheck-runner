@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "jobId": "example-svg-001",
-  "action": "template-image.render",
+  "action": "image_generation",
   "actionVersion": "1.0.0",
   "payload": {
     "renderer": "svg",
@@ -17,6 +17,7 @@
       "width": 1080,
       "height": 1350,
       "format": "png"
-    }
+    },
+    "fitMode": "contain"
   }
 }

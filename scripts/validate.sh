@@ -16,7 +16,7 @@ done < <(find runner adapters scripts actions tests -type f -name '*.sh' -print0
 ./tests/test-executor-routing.sh
 
 if command -v node >/dev/null 2>&1; then
-  node --check actions/template-image-render/src/render-playwright.mjs
+  node --check actions/image_generation/src/render-playwright.mjs
 else
   echo "Node.js is not installed locally; skipping the optional Playwright script syntax check."
 fi

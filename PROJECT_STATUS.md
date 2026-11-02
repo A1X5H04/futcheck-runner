@@ -1,7 +1,7 @@
 # Project status
 
 - Initial portable Runner framework created.
-- Includes one example action: `template-image.render`.
+- Includes one example action: `image_generation`.
 - SVG rendering uses the native Linebender `resvg` CLI v0.49.0.
 - Playwright rendering is an explicit variant pinned to v1.64.1. It is never an automatic fallback.
 - A generic GitHub Actions workflow can execute any action discovered by the generic Runner.

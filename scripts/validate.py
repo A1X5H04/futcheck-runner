@@ -50,7 +50,7 @@ def main() -> int:
             Draft202012Validator(action_schema).validate(manifest)
         assert manifest.get("schemaVersion") == 1, f"Unsupported manifest schema: {manifest_path}"
         action_id = manifest.get("id")
-        assert isinstance(action_id, str) and re.fullmatch(r"[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*", action_id), f"Invalid action id: {manifest_path}"
+        assert isinstance(action_id, str) and re.fullmatch(r"(?:[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*|[a-z][a-z0-9_-]*)", action_id), f"Invalid action id: {manifest_path}"
         assert action_id not in manifests, f"Duplicate action id: {action_id}"
         assert re.fullmatch(r"\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?", manifest.get("version", "")), f"Invalid version: {action_id}"
         action_dir = manifest_path.parent
@@ -100,8 +100,8 @@ def main() -> int:
     assert not safe_relative_path("/tmp/escape.png")
     assert not safe_relative_path("nested/../escape.png")
 
-    svg_template = ROOT / "actions/template-image-render/templates/feature-announcement/template.svg"
-    html_template = ROOT / "actions/template-image-render/templates/feature-announcement/index.html"
+    svg_template = ROOT / "actions/image_generation/templates/feature-announcement/template.svg"
+    html_template = ROOT / "actions/image_generation/templates/feature-announcement/index.html"
     assert svg_template.is_file() and html_template.is_file()
     for token in ("{{TITLE}}", "{{SUBTITLE}}", "{{EYEBROW}}", "{{ACCENT}}"):
         assert token in svg_template.read_text(encoding="utf-8"), f"Missing SVG token {token}"

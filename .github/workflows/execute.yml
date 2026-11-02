@@ -11,6 +11,14 @@ on:
         description: ID of a stored job to retrieve from the configured Futcheck job API.
         required: false
         type: string
+      job_key:
+        description: Workflow job key for correlation and callback.
+        required: false
+        type: string
+      callback_url:
+        description: Webhook callback URL to report completion and output URLs back to Futcheck.
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -26,14 +34,28 @@ jobs:
           persist-credentials: false
 
       - name: Execute action
+        id: run_action
         env:
           FUTCHECK_JOB_JSON: ${{ inputs.job_json }}
           FUTCHECK_JOB_ID: ${{ inputs.job_id }}
+          FUTCHECK_JOB_KEY: ${{ inputs.job_key }}
           FUTCHECK_JOB_API_URL: ${{ vars.FUTCHECK_JOB_API_URL }}
           FUTCHECK_JOB_TOKEN: ${{ secrets.FUTCHECK_JOB_TOKEN }}
           FUTCHECK_ALLOWED_JOB_HOSTS: ${{ vars.FUTCHECK_ALLOWED_JOB_HOSTS }}
           FUTCHECK_WORK_DIR: ${{ runner.temp }}/futcheck-work
         run: ./adapters/github/execute.sh
+
+      - name: Upload artifact to tmpfiles.org and callback backend
+        if: always()
+        env:
+          FUTCHECK_JOB_ID: ${{ inputs.job_id }}
+          FUTCHECK_JOB_KEY: ${{ inputs.job_key }}
+          FUTCHECK_JOB_API_URL: ${{ vars.FUTCHECK_JOB_API_URL }}
+          FUTCHECK_CALLBACK_URL: ${{ inputs.callback_url || vars.FUTCHECK_CALLBACK_URL }}
+          FUTCHECK_JOB_TOKEN: ${{ secrets.FUTCHECK_JOB_TOKEN }}
+          FUTCHECK_WORK_DIR: ${{ runner.temp }}/futcheck-work
+          EXECUTION_STATUS: ${{ steps.run_action.outcome }}
+        run: ./adapters/github/report-result.sh
 
       - name: Upload execution output
         if: always()

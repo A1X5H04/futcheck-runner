@@ -58,6 +58,17 @@ for candidate in "$ROOT_DIR"/actions/*/action.json; do
   fi
 done
 
+if [[ -z "$ACTION_MANIFEST" ]]; then
+  for candidate in "$ROOT_DIR"/actions/*/action.json; do
+    [[ -f "$candidate" ]] || continue
+    candidate_id="$(jq -r '.id // empty' "$candidate")"
+    if [[ "$candidate_id" == "image_generation" && "$ACTION_ID" =~ ^(template-image-render|template-image\.render|render-.*)$ ]]; then
+      ACTION_MANIFEST="$candidate"
+      break
+    fi
+  done
+fi
+
 [[ -n "$ACTION_MANIFEST" ]] || { echo "Unknown action: $ACTION_ID" >&2; exit 2; }
 ACTION_DIR="$(dirname "$ACTION_MANIFEST")"
 MANIFEST_VERSION="$(jq -r '.version // empty' "$ACTION_MANIFEST")"

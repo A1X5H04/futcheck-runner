@@ -33,7 +33,7 @@ The generic executor searches `actions/*/action.json` for the matching action ID
 
 ## Execution variants
 
-An action can expose one default execution variant or several variants. For example, `template-image.render` reads `payload.renderer`:
+An action can expose one default execution variant or several variants. For example, `image_generation` reads `payload.renderer`:
 
 - `svg` selects `Dockerfile.svg` and the resvg CLI.
 - `playwright` selects `Dockerfile.playwright` and Chromium.

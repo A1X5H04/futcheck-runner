@@ -9,3 +9,8 @@ WORK_DIR="${FUTCHECK_WORK_DIR:-${RUNNER_TEMP:-/tmp}/futcheck-work}"
   --job "$WORK_DIR/job.json" \
   --input "$WORK_DIR/input" \
   --output "$WORK_DIR/output"
+
+# If running outside GitHub Actions (e.g. locally), report result immediately
+if [[ -z "${GITHUB_ACTIONS:-}" ]]; then
+  "$ROOT_DIR/adapters/github/report-result.sh" 0 || true
+fi

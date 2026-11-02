@@ -13,7 +13,7 @@ The generic GitHub workflow is an adapter. It does not contain action business l
 
 ## Action versus execution variant
 
-An action identifies the kind of work. An execution variant selects one declared runtime implementation of that action. For the image action, `svg` and `playwright` are variants of `template-image.render`, not separate actions.
+An action identifies the kind of work. An execution variant selects one declared runtime implementation of that action. For the image action, `svg` and `playwright` are variants of `image_generation`, not separate actions.
 
 ## Container boundaries
 

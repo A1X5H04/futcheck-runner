@@ -7,7 +7,7 @@ The backend owns business orchestration and action-to-platform routing. This rep
 ## Current implementation
 
 - One generic action executor: `runner/execute.sh`.
-- One example action: `template-image.render`.
+- One example action: `image_generation`.
 - SVG is the default renderer and uses the native Linebender `resvg` CLI.
 - Playwright is an explicit renderer option with a separate image variant. It is never used as an SVG fallback.
 - One generic GitHub Actions workflow can execute any action added to the action catalog.
@@ -49,7 +49,7 @@ Every action receives one common job envelope:
 {
   "schemaVersion": 1,
   "jobId": "social-001",
-  "action": "template-image.render",
+  "action": "image_generation",
   "actionVersion": "1.0.0",
   "payload": {}
 }
