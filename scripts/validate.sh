@@ -14,6 +14,8 @@ while IFS= read -r -d '' file; do
 done < <(find runner adapters scripts actions tests -type f -name '*.sh' -print0)
 
 ./tests/test-executor-routing.sh
+./tests/test-supervisor.sh
+./tests/test-dispatcher.sh
 
 if command -v node >/dev/null 2>&1; then
   node --check actions/image_generation/src/render-playwright.mjs
