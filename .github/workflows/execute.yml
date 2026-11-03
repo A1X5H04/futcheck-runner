@@ -19,6 +19,10 @@ on:
         description: Webhook callback URL to report completion and output URLs back to Futcheck.
         required: false
         type: string
+      runner_metadata:
+        description: Opaque backend correlation metadata echoed in runner events.
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -42,20 +46,10 @@ jobs:
           FUTCHECK_JOB_API_URL: ${{ vars.FUTCHECK_JOB_API_URL }}
           FUTCHECK_JOB_TOKEN: ${{ secrets.FUTCHECK_JOB_TOKEN }}
           FUTCHECK_ALLOWED_JOB_HOSTS: ${{ vars.FUTCHECK_ALLOWED_JOB_HOSTS }}
+          FUTCHECK_RUNNER_METADATA: ${{ inputs.runner_metadata }}
+          FUTCHECK_CALLBACK_URL: ${{ inputs.callback_url || vars.FUTCHECK_CALLBACK_URL }}
           FUTCHECK_WORK_DIR: ${{ runner.temp }}/futcheck-work
         run: ./adapters/github/execute.sh
-
-      - name: Upload artifact to tmpfiles.org and callback backend
-        if: always()
-        env:
-          FUTCHECK_JOB_ID: ${{ inputs.job_id }}
-          FUTCHECK_JOB_KEY: ${{ inputs.job_key }}
-          FUTCHECK_JOB_API_URL: ${{ vars.FUTCHECK_JOB_API_URL }}
-          FUTCHECK_CALLBACK_URL: ${{ inputs.callback_url || vars.FUTCHECK_CALLBACK_URL }}
-          FUTCHECK_JOB_TOKEN: ${{ secrets.FUTCHECK_JOB_TOKEN }}
-          FUTCHECK_WORK_DIR: ${{ runner.temp }}/futcheck-work
-          EXECUTION_STATUS: ${{ steps.run_action.outcome }}
-        run: ./adapters/github/report-result.sh
 
       - name: Upload execution output
         if: always()

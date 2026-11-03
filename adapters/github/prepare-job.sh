@@ -11,6 +11,7 @@ JOB_KEY_INPUT="${FUTCHECK_JOB_KEY:-}"
 JOB_API_URL="${FUTCHECK_JOB_API_URL:-}"
 JOB_TOKEN="${FUTCHECK_JOB_TOKEN:-}"
 ALLOWED_HOSTS="${FUTCHECK_ALLOWED_JOB_HOSTS:-}"
+RUNNER_METADATA_JSON="${FUTCHECK_RUNNER_METADATA:-}"
 
 mkdir -p "$INPUT_DIR" "$OUTPUT_DIR"
 
@@ -64,15 +65,19 @@ else
 fi
 
 # Normalize and adapt the job file to the Runner job envelope format
-python3 - "$JOB_FILE" "$JOB_ID" "$JOB_KEY_INPUT" "$WORK_DIR/job_key.txt" <<'PY'
+python3 - "$JOB_FILE" "$JOB_ID" "$JOB_KEY_INPUT" "$WORK_DIR/job_key.txt" "$WORK_DIR/job_id.txt" "$WORK_DIR/runner_metadata.json" "$RUNNER_METADATA_JSON" <<'PY'
 import json
 import sys
+import uuid
 from pathlib import Path
 
 job_file = Path(sys.argv[1])
 job_id_param = sys.argv[2] if len(sys.argv) > 2 else ""
 job_key_param = sys.argv[3] if len(sys.argv) > 3 else ""
 job_key_out = Path(sys.argv[4]) if len(sys.argv) > 4 else None
+job_id_out = Path(sys.argv[5])
+metadata_out = Path(sys.argv[6])
+metadata_input = sys.argv[7] if len(sys.argv) > 7 else ""
 
 raw = json.loads(job_file.read_text(encoding="utf-8"))
 
@@ -88,6 +93,27 @@ resolved_job_key = (
 )
 if job_key_out:
     job_key_out.write_text(str(resolved_job_key), encoding="utf-8")
+
+backend_job_id = raw.get("id") or job_id_param
+try:
+    backend_job_id = str(uuid.UUID(str(backend_job_id)))
+except (ValueError, TypeError, AttributeError):
+    # Inline jobs are useful for local/manual execution but have no backend row.
+    backend_job_id = str(uuid.uuid4())
+job_id_out.write_text(str(backend_job_id), encoding="utf-8")
+
+if metadata_input:
+    callback_metadata = json.loads(metadata_input)
+else:
+    current_step = raw.get("current_step")
+    step = (raw.get("steps") or {}).get(current_step, {}) if current_step else {}
+    runner = step.get("runner", {}) if isinstance(step, dict) else {}
+    callback_metadata = {
+        "workflowStep": current_step,
+        "executionId": runner.get("executionId"),
+    }
+callback_metadata = {k: v for k, v in callback_metadata.items() if v is not None}
+metadata_out.write_text(json.dumps(callback_metadata, separators=(",", ":")), encoding="utf-8")
 
 is_runner_envelope = (
     raw.get("schemaVersion") == 1
