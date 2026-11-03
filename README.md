@@ -7,6 +7,10 @@ The backend owns business orchestration and action-to-platform routing. This rep
 ## Current implementation
 
 - One generic action executor: `runner/execute.sh`.
+- One generic supervisor: `runner/supervisor.sh`, which captures lifecycle,
+  phases and log tails without knowing workflow or checkpoint semantics.
+- One singleton outbox relay: `runner/dispatcher.sh`, which batches durable
+  JSONL events and retries them until the backend acknowledges them.
 - One example action: `image_generation`.
 - SVG is the default renderer and uses the native Linebender `resvg` CLI.
 - Playwright is an explicit renderer option with a separate image variant. It is never used as an SVG fallback.
@@ -77,7 +81,23 @@ It supports either:
 - `job_id`: the ID of a job stored by Futcheck. Configure the repository variable `FUTCHECK_JOB_API_URL` with the base endpoint, the secret `FUTCHECK_JOB_TOKEN` with an internal API token, and `FUTCHECK_ALLOWED_JOB_HOSTS` with the exact API hostname (comma-separated if needed).
 - `job_json`: the complete JSON job, useful for local testing and small manual runs.
 
-The workflow checks out this repository, materializes `/work/job.json`, and invokes `runner/execute.sh`. It uploads output as a workflow artifact for demonstration. Production output transfer and backend callbacks belong in the deployment adapter/integration, not inside action implementations. The job token is used only by the adapter and is never mounted into the action container or written to `job.json`.
+The workflow checks out this repository, materializes `/work/job.json`, and
+invokes the supervisor around `runner/execute.sh`. The adapter publishes the
+artifact, writes a result document, and leaves backend delivery to the outbox
+dispatcher. The backend supplies opaque checkpoint correlation metadata; the
+runner echoes it unchanged.
+
+Required GitHub repository configuration:
+
+- `FUTCHECK_JOB_API_URL` variable: backend base URL.
+- `FUTCHECK_CALLBACK_URL` variable: `/api/workflow/runner/webhook/callback`.
+- `FUTCHECK_ALLOWED_JOB_HOSTS` variable: exact backend hostname allowlist.
+- `FUTCHECK_JOB_TOKEN` secret: same value as the backend's
+  `WORKFLOW_RUNNER_SECRET`.
+
+The outbox provides at-least-once delivery. The backend deduplicates events by
+the opaque execution id and monotonically increasing sequence number. The job
+token is never mounted into an action container or written to `job.json`.
 
 ## Add an action
 
