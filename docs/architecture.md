@@ -1,30 +1,80 @@
 # Architecture
 
-Futcheck Runner is an execution repository. The backend owns business orchestration, action-to-platform routing, job records, retries, and callbacks.
+Futcheck Runner is a small execution OS with three extension contracts.
 
-This repository owns:
+```text
+platform adapter --prepare--> canonical /work contract
+                                  |
+generic runner --> execution driver --> action worker
+       |
+       +--> JSONL outbox --> backend control endpoint
+```
 
-- Action manifests and action implementations under `actions/`.
-- The common job and result contracts under `contracts/`.
-- A small generic executor that discovers an action manifest, selects a declared execution variant, builds its container image, and runs it.
-- Platform adapters that materialize jobs and invoke the generic executor.
+## Core responsibilities
 
-The generic GitHub workflow is an adapter. It does not contain action business logic. The local adapter uses the same executor. A future Cloud Run adapter can consume the same action bundle and manifest.
+The Bash-only core under `runner/` owns:
 
-## Action versus execution variant
+- execution identity, locking, supervision, timeout and cancellation;
+- action discovery and version/variant selection;
+- startup acknowledgement and one terminal result event;
+- immutable outbox batches and acknowledged delivery;
+- result-manifest, path, byte-count and digest verification.
 
-An action identifies the kind of work. An execution variant selects one declared runtime implementation of that action. For the image action, `svg` and `playwright` are variants of `image_generation`, not separate actions.
+The generic controller contains no action aliases, platform mappings or Docker
+commands. Docker is one optional execution driver.
 
-## Container boundaries
+## Platform adapter contract
 
-The current example action has separate SVG and Playwright Dockerfiles. This avoids installing a browser in the SVG image. The generic executor selects the Dockerfile using the manifest's selector and the job payload.
+A platform adapter receives provider-specific input and exposes one executable
+prepare command. The command takes configuration from its environment and must:
 
-A future action may use one Dockerfile for all its work, or offer multiple declared variants. The repository does not require one Docker image per action, but the current generic executor builds the variant image locally from that action's Dockerfile.
+1. Materialize the canonical job at the path passed to `runner/entrypoint.sh`.
+2. Create the input and output directories.
+3. Write optional opaque callback metadata to `RUNNER_METADATA_FILE`.
+4. Return nonzero on any preparation failure.
 
-## Portability boundary
+The adapter calls `runner/entrypoint.sh` with the backend-created execution UUID,
+expected paths and its prepare executable. Preparation runs inside the supervised
+lifecycle, so preparation failures become terminal runner events.
 
-Platform adapters may receive jobs differently. They must stage the same `/work/job.json`, `/work/input`, and `/work/output` contract and invoke the action's container entrypoint. Action source code must not depend on GitHub environment variables, GitHub APIs, Cloud Run APIs, or backend endpoints.
+Backend-side platform integrations implement `dispatch`, `getStatus`, `cancel`,
+`getLogs` and `getArtifacts`. That control-plane interface is outside the Runner
+process but uses the same execution UUID and provider run ID.
 
-## Current execution trade-off
+## Execution driver contract
 
-The local Docker executor fingerprints the action bundle and reuses the matching local image. Docker also reuses build layers when an updated fingerprint requires a rebuild. GitHub-hosted runners are ephemeral, so an image built during one workflow run is not guaranteed to remain available to the next run. A persistent self-hosted worker, a platform build cache, or a remote image registry can address that later. Image publishing is deliberately not required by this initial repository.
+An action variant names a driver. The generic router exports resolved action and
+filesystem context, then invokes:
+
+```text
+runner/drivers/<driver>.sh validate|preflight|execute
+```
+
+Drivers read the documented `RUNNER_ACTION_*`, `RUNNER_JOB_FILE`,
+`RUNNER_INPUT_DIR` and `RUNNER_OUTPUT_DIR` environment variables. A new runtime
+is added by adding a driver file; `runner/execute.sh` remains unchanged.
+
+The bundled `docker` driver builds and caches action images, applies declared
+resources and executes preflight in an isolated temporary output directory. The
+generic controller verifies every successful driver's output contract.
+
+## Action contract
+
+Actions are discovered from `actions/*/action.json`. An action owns its payload
+schema, preflight, runtime files and result production. It knows nothing about
+GitHub, backend endpoints or orchestration.
+
+## Reporting
+
+Only meaningful events are generated:
+
+1. `STARTED / RUNNER_STARTED`, after platform preparation and action preflight.
+2. Exactly one terminal `COMPLETED`, `FAILED` or `CANCELLED` event.
+
+Every event is appended before delivery. The dispatcher atomically claims source
+events into uniquely named immutable pending batches. A batch is deleted only
+when the backend acknowledges a sequence at or beyond that batch's final event.
+Failed batches remain available for retry and platform recovery artifacts.
+
+The backend still owns final reconciliation when an entire execution platform is
+lost before the Runner can communicate.

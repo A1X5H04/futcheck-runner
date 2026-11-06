@@ -19,11 +19,16 @@ Required fields:
 - `actionVersion`: exact action version expected by the job.
 - `payload`: action-specific JSON object.
 
-The generic executor verifies the common envelope, action ID, action version, and execution variant. Each action validates its own payload before doing work. The published JSON Schema files are the contract source of truth.
+The generic executor verifies the common envelope, action ID, action version,
+execution variant and driver. Each action validates its own payload during
+preflight before the startup event is acknowledged.
 
 ## Output
 
-Actions write all generated files under `/work/output`. The action must write `/work/output/manifest.json` on success and should attempt to write it on failure.
+Actions write generated files under `/work/output`. The action must write
+`/work/output/manifest.json` on success and should attempt it on failure. Actions
+that perform side effects or return structured data may declare an empty file
+list and write optional `result.json`.
 
 A successful process exits with code `0`. A failed process exits nonzero. The platform adapter must treat a nonzero exit as failure even when a failure manifest exists.
 
@@ -31,7 +36,8 @@ Output file paths in the manifest are relative to `/work/output`. Paths must not
 
 ## Resource and network settings
 
-The action manifest declares resource hints per execution variant. The local Docker executor applies CPU, memory, shared-memory, and network settings. Other adapters may translate the same hints into platform-specific controls.
+The action manifest declares resource hints per execution variant. The selected
+execution driver translates those hints into runtime-specific controls.
 
 Network access defaults to disabled. If an action requires network access, declare it in its manifest and document the external destinations it needs.
 

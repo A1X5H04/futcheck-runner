@@ -9,7 +9,7 @@ actions/<action-folder>/
 ├── action.json
 ├── payload.schema.json
 ├── entrypoint.sh
-├── Dockerfile[.<variant>]
+├── Dockerfile[.<variant>] # when using the Docker driver
 └── src/
 ```
 
@@ -23,7 +23,7 @@ The manifest declares:
 - The action entrypoint.
 - An optional selector path into `job.json` for choosing a variant.
 - A default variant.
-- Each variant's Dockerfile and resource/network hints.
+- Each variant's execution driver, driver configuration and resource hints.
 - The payload schema path.
 - The shared input and output filesystem locations.
 
@@ -38,7 +38,17 @@ An action can expose one default execution variant or several variants. For exam
 - `svg` selects `Dockerfile.svg` and the resvg CLI.
 - `playwright` selects `Dockerfile.playwright` and Chromium.
 
+Both variants currently select the `docker` execution driver. Another action can
+select another installed driver without changing the generic executor.
+
 The action must reject a renderer/variant mismatch. Playwright is never an automatic fallback after an SVG error.
+
+## Preflight
+
+Actions may declare `execution.preflight`; it defaults to the action entrypoint.
+The runner invokes that command with `--preflight` inside the selected container
+before sending the runner-started acknowledgement. It must validate the
+action-specific payload and exit without producing side effects or outputs.
 
 ## Entrypoint
 
@@ -51,8 +61,16 @@ The container entrypoint must:
 5. Write `/work/output/manifest.json` on success and attempt it on failure.
 6. Exit `0` on success and nonzero on failure.
 
+An action may write `/work/output/result.json` for action-owned result data.
+If an artifact must be published to an external service, implement that in the
+action (or its dedicated worker-side publisher) and declare the required network
+access in the action manifest. The generic runner never owns publisher logic or
+publisher credentials.
+
 Never evaluate shell commands supplied by the job payload. Job data may select known, declared variants, but it must not supply executable paths or Dockerfile paths.
 
-## Container build context
+## Docker build context
 
-The action directory is the Docker build context. Keep all files required at runtime inside that directory. Do not depend on another action's files or on repository paths outside the action directory.
+For Docker variants, the action directory is the build context. Keep all files
+required at runtime inside that directory. Do not depend on another action's
+files or on repository paths outside the action directory.
