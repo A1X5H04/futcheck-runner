@@ -40,11 +40,13 @@ ACTIVE_FILE="$OUTBOX_DIR/$EXECUTION_ID.active"
 RUN_LOCK_DIR="$OUTBOX_DIR/$EXECUTION_ID.runlock"
 ABORT_FILE="$OUTBOX_DIR/$EXECUTION_ID.abort"
 EVENT_FILE="$OUTBOX_DIR/$EXECUTION_ID.jsonl"
+MESSAGE_FILE="$OUTBOX_DIR/$EXECUTION_ID.messages.jsonl"
 LOG_FILE="$OUTBOX_DIR/$EXECUTION_ID.log"
 STATE_FILE="$OUTBOX_DIR/$EXECUTION_ID.state.json"
 PLAN_FILE="${RUNNER_PLAN_FILE:-$WORK_DIR/execution-plan.json}"
 METADATA_FILE="${RUNNER_METADATA_FILE:-}"
 RESULT_FILE="${RUNNER_RESULT_FILE:-}"
+WORKER_MESSAGE_FILE="${RUNNER_MESSAGE_FILE:-$WORK_DIR/control/messages.jsonl}"
 
 json_escape() {
   LC_ALL=C tr -d '\000-\010\013\014\016-\037' |
@@ -72,6 +74,16 @@ current_job_id() {
   else
     printf '%s' "$EXECUTION_ID"
   fi
+}
+
+new_uuid() {
+  local hash
+  if [[ -r /proc/sys/kernel/random/uuid ]]; then
+    tr -d '\n' < /proc/sys/kernel/random/uuid
+    return
+  fi
+  hash="$(printf '%s' "$EXECUTION_ID:$(date +%s%N):$RANDOM:$RANDOM" | sha256sum | awk '{print $1}')"
+  printf '%s-%s-4%s-8%s-%s' "${hash:0:8}" "${hash:8:4}" "${hash:13:3}" "${hash:17:3}" "${hash:20:12}"
 }
 
 next_seq() {
@@ -110,7 +122,8 @@ record_state() {
 emit_event() {
   local status="$1" phase="$2" code="$3" message="$4"
   local error_code="${5:-0}" error_category="${6:-}" error_message="${7:-}"
-  local seq timestamp logs metadata result error job_id
+  local event_id seq timestamp logs metadata result error job_id
+  event_id="$(new_uuid)"
   seq="$(next_seq)"
   timestamp="$(date +%s%3N)"
   logs="$(last_logs)"
@@ -122,13 +135,46 @@ emit_event() {
   if [[ "$status" == "FAILED" || "$status" == "CANCELLED" ]]; then
     error="{\"code\":$error_code,\"category\":\"$(printf '%s' "$error_category" | json_escape)\",\"message\":\"$(printf '%s' "$error_message" | json_escape)\"}"
   fi
-  printf '{"executionId":"%s","jobId":"%s","attempt":%s,"platform":"%s","platformRunId":"%s","seq":%s,"timestamp":%s,"status":"%s","phase":"%s","code":"%s","message":"%s","logs":"%s","result":%s,"error":%s,"metadata":%s}\n' \
-    "$(printf '%s' "$EXECUTION_ID" | json_escape)" "$(printf '%s' "$job_id" | json_escape)" "$ATTEMPT" \
+  printf '{"eventId":"%s","executionId":"%s","jobId":"%s","attempt":%s,"platform":"%s","platformRunId":"%s","seq":%s,"timestamp":%s,"status":"%s","phase":"%s","code":"%s","message":"%s","logs":"%s","result":%s,"error":%s,"metadata":%s}\n' \
+    "$(printf '%s' "$event_id" | json_escape)" "$(printf '%s' "$EXECUTION_ID" | json_escape)" "$(printf '%s' "$job_id" | json_escape)" "$ATTEMPT" \
     "$(printf '%s' "$PLATFORM" | json_escape)" "$(printf '%s' "$PLATFORM_RUN_ID" | json_escape)" "$seq" "$timestamp" "$status" \
     "$(printf '%s' "$phase" | json_escape)" "$(printf '%s' "$code" | json_escape)" "$(printf '%s' "$message" | json_escape)" \
     "$logs" "$result" "$error" "$metadata" >> "$EVENT_FILE"
   sync -f "$EVENT_FILE" 2>/dev/null || true
   record_state "$status" "$code" "$message" "$seq"
+}
+
+emit_worker_message() {
+  local code="$1" message="$2"
+  local message_id timestamp metadata job_id
+  message_id="$(new_uuid)"
+  timestamp="$(date +%s%3N)"
+  metadata="$(read_json_object "$METADATA_FILE" '{}')"
+  job_id="$(current_job_id)"
+  printf '{"messageId":"%s","executionId":"%s","jobId":"%s","attempt":%s,"platform":"%s","platformRunId":"%s","timestamp":%s,"code":"%s","message":"%s","metadata":%s}\n' \
+    "$(printf '%s' "$message_id" | json_escape)" "$(printf '%s' "$EXECUTION_ID" | json_escape)" \
+    "$(printf '%s' "$job_id" | json_escape)" "$ATTEMPT" "$(printf '%s' "$PLATFORM" | json_escape)" \
+    "$(printf '%s' "$PLATFORM_RUN_ID" | json_escape)" "$timestamp" \
+    "$(printf '%s' "$code" | json_escape)" "$(printf '%s' "$message" | json_escape)" "$metadata" >> "$MESSAGE_FILE"
+  sync -f "$MESSAGE_FILE" 2>/dev/null || true
+}
+
+worker_message_lines=0
+drain_worker_messages() {
+  local total_lines raw code message emitted=false
+  [[ -s "$WORKER_MESSAGE_FILE" ]] || return 1
+  total_lines="$(wc -l < "$WORKER_MESSAGE_FILE" | tr -d ' ')"
+  (( total_lines > worker_message_lines )) || return 1
+  while IFS= read -r raw || [[ -n "$raw" ]]; do
+    [[ -n "$raw" ]] || continue
+    code="$(jq -r '.code // "WORKER_MESSAGE"' <<< "$raw" 2>/dev/null || true)"
+    message="$(jq -r '.message // empty' <<< "$raw" 2>/dev/null || true)"
+    [[ "$code" =~ ^[A-Z][A-Z0-9_]*$ && -n "$message" && ${#message} -le 4000 ]] || continue
+    emit_worker_message "$code" "$message"
+    emitted=true
+  done < <(tail -n "+$((worker_message_lines + 1))" "$WORKER_MESSAGE_FILE")
+  worker_message_lines="$total_lines"
+  [[ "$emitted" == true ]]
 }
 
 callback_configuration_is_valid() {
@@ -137,7 +183,8 @@ callback_configuration_is_valid() {
 
 pending_events_exist() {
   [[ -e "$EVENT_FILE" ]] && return 0
-  compgen -G "$OUTBOX_DIR/$EXECUTION_ID.*.pending.jsonl" >/dev/null
+  compgen -G "$OUTBOX_DIR/$EXECUTION_ID.*.pending.jsonl" >/dev/null && return 0
+  [[ -e "$MESSAGE_FILE" ]] && return 0
 }
 
 deliver_until() {
@@ -278,6 +325,9 @@ while kill -0 "$worker_pid" 2>/dev/null; do
     tail -n "+$((processed_lines + 1))" "$LOG_FILE"
     processed_lines=$total_lines
   fi
+  if drain_worker_messages; then
+    "$ROOT_DIR/runner/dispatcher.sh" --once --execution-id "$EXECUTION_ID" || true
+  fi
   if [[ -e "$ABORT_FILE" ]]; then cancelled=true; terminate_worker; break; fi
   if (( $(date +%s) >= execution_deadline )); then timed_out=true; terminate_worker; break; fi
   sleep 1
@@ -289,6 +339,9 @@ worker_status=$?
 set -e
 total_lines="$(wc -l < "$LOG_FILE" | tr -d ' ')"
 (( total_lines <= processed_lines )) || tail -n "+$((processed_lines + 1))" "$LOG_FILE"
+if drain_worker_messages; then
+  "$ROOT_DIR/runner/dispatcher.sh" --once --execution-id "$EXECUTION_ID" || true
+fi
 rm -f "$ACTIVE_FILE"
 
 if [[ "$cancelled" == true ]]; then

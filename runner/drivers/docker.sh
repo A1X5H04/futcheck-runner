@@ -6,6 +6,7 @@ OPERATION="${1:?driver operation required}"
 : "${RUNNER_JOB_FILE:?}"
 : "${RUNNER_INPUT_DIR:?}"
 : "${RUNNER_OUTPUT_DIR:?}"
+: "${RUNNER_CONTROL_DIR:?}"
 : "${RUNNER_ACTION_ID:?}"
 : "${RUNNER_ACTION_VERSION:?}"
 : "${RUNNER_ACTION_MANIFEST:?}"
@@ -60,8 +61,13 @@ fi
 RUN_OUTPUT_DIR="$RUNNER_OUTPUT_DIR"
 if [[ "$OPERATION" == "preflight" ]]; then
   RUN_OUTPUT_DIR="$(mktemp -d)"
-  trap 'rm -rf "$RUN_OUTPUT_DIR"' EXIT
+  RUN_CONTROL_DIR="$(mktemp -d)"
+  cp "$RUNNER_ROOT_DIR/runner/worker-api.sh" "$RUN_CONTROL_DIR/runner-api.sh"
+  chmod 0444 "$RUN_CONTROL_DIR/runner-api.sh"
+  : > "$RUN_CONTROL_DIR/messages.jsonl"
+  trap 'rm -rf "$RUN_OUTPUT_DIR" "$RUN_CONTROL_DIR"' EXIT
 else
+  RUN_CONTROL_DIR="$RUNNER_CONTROL_DIR"
   if find "$RUNNER_OUTPUT_DIR" -mindepth 1 -print -quit | grep -q .; then
     echo "Output directory must be empty before worker execution." >&2
     exit 2
@@ -72,7 +78,8 @@ DOCKER_ARGS=(run --rm --init --memory "$MEMORY" --cpus "$CPUS" --shm-size "$SHM_
   --tmpfs /tmp:rw,nosuid,nodev,size=256m
   --mount "type=bind,src=$RUNNER_JOB_FILE,dst=/work/job.json,readonly"
   --mount "type=bind,src=$RUNNER_INPUT_DIR,dst=/work/input,readonly"
-  --mount "type=bind,src=$RUN_OUTPUT_DIR,dst=/work/output")
+  --mount "type=bind,src=$RUN_OUTPUT_DIR,dst=/work/output"
+  --mount "type=bind,src=$RUN_CONTROL_DIR,dst=/runner")
 [[ "$NETWORK" == "false" ]] && DOCKER_ARGS+=(--network none) || DOCKER_ARGS+=(--network bridge)
 
 ENTRYPOINT="$ENTRYPOINT_REL"
@@ -81,7 +88,8 @@ if [[ "$OPERATION" == "preflight" ]]; then ENTRYPOINT="$PREFLIGHT_REL"; COMMAND_
 
 set +e
 timeout --signal=TERM --kill-after=15s "${TIMEOUT_SECONDS}s" \
-  docker "${DOCKER_ARGS[@]}" --entrypoint "/action/$ENTRYPOINT" "$IMAGE_TAG" "${COMMAND_ARGS[@]}"
+  docker "${DOCKER_ARGS[@]}" --env RUNNER_MESSAGE_FILE=/runner/messages.jsonl \
+  --entrypoint "/action/$ENTRYPOINT" "$IMAGE_TAG" "${COMMAND_ARGS[@]}"
 STATUS=$?
 set -e
 (( STATUS == 0 )) || { echo "Docker driver $OPERATION failed with status $STATUS." >&2; exit "$STATUS"; }

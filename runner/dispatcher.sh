@@ -6,9 +6,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK_DIR="${RUNNER_WORK_DIR:-${FUTCHECK_WORK_DIR:-$ROOT_DIR/.work}}"
 OUTBOX_DIR="$WORK_DIR/outbox"
 PRIMARY_CALLBACK_URL="${RUNNER_CONTROL_URL:-${BACKEND_STATUS_URL:-}}"
-FALLBACK_CALLBACK_URL="${FUTCHECK_CALLBACK_URL:-}"
-RUNNER_TOKEN="${RUNNER_TOKEN:-${FUTCHECK_JOB_TOKEN:-}}"
-CALLBACK_ALLOWED_HOSTS="${RUNNER_ALLOWED_CALLBACK_HOSTS:-${FUTCHECK_ALLOWED_CALLBACK_HOSTS:-}}"
+FALLBACK_CALLBACK_URL="${WEBHOOK_CALLBACK_URL:-}"
+RUNNER_TOKEN="${RUNNER_TOKEN:-}"
+CALLBACK_ALLOWED_HOSTS="${RUNNER_ALLOWED_CALLBACK_HOSTS:-${WEBHOOK_ALLOWED_HOSTS:-}}"
 LOCK_WAIT="${RUNNER_DISPATCH_LOCK_WAIT_SECONDS:-35}"
 ONCE=false
 VALIDATE_CONFIG=false
@@ -70,7 +70,13 @@ timestamp="$(date +%s%N)"
 for source_file in "$OUTBOX_DIR"/*.jsonl; do
   [[ -e "$source_file" ]] || continue
   base="$(basename "$source_file")"
-  execution_id="${base%.jsonl}"
+  record_kind="events"
+  if [[ "$base" =~ ^(.+)\.messages\.jsonl$ ]]; then
+    execution_id="${BASH_REMATCH[1]}"
+    record_kind="messages"
+  else
+    execution_id="${base%.jsonl}"
+  fi
   [[ "$execution_id" =~ $UUID_PATTERN ]] || continue
   [[ -z "$FILTER_EXECUTION_ID" || "$execution_id" == "$FILTER_EXECUTION_ID" ]] || continue
   first_seq="$(head -n 1 "$source_file" | jq -r '.seq // 0' 2>/dev/null || printf '0')"
@@ -79,7 +85,7 @@ for source_file in "$OUTBOX_DIR"/*.jsonl; do
   [[ "$last_seq" =~ ^[0-9]+$ ]] || last_seq=0
   printf -v first_padded '%020d' "$first_seq"
   printf -v last_padded '%020d' "$last_seq"
-  pending_file="$OUTBOX_DIR/${execution_id}.${first_padded}-${last_padded}.${timestamp}.$$.pending.jsonl"
+  pending_file="$OUTBOX_DIR/${execution_id}.${record_kind}.${first_padded}-${last_padded}.${timestamp}.$$.pending.jsonl"
   mv "$source_file" "$pending_file"
   chmod 0444 "$pending_file"
 done
@@ -91,19 +97,32 @@ for pending_file in "$OUTBOX_DIR"/*.pending.jsonl; do
   [[ -z "$FILTER_EXECUTION_ID" || "$pending_base" == "$FILTER_EXECUTION_ID".* ]] || continue
   pending_execution_id="${pending_base%%.*}"
   [[ "$pending_execution_id" =~ $UUID_PATTERN ]] || continue
+  pending_remainder="${pending_base#"$pending_execution_id".}"
+  if [[ "$pending_remainder" == messages.* ]]; then
+    record_kind="messages"
+  else
+    record_kind="events"
+  fi
   payload_file="$(mktemp)"
   response_file="$(mktemp)"
   valid_file="$(mktemp)"
 
   while IFS= read -r event || [[ -n "$event" ]]; do
     [[ -n "$event" ]] || continue
-    if jq -e --arg executionId "$pending_execution_id" '
-      type == "object"
-      and .executionId == $executionId
+    if [[ "$record_kind" == "events" ]] && jq -e --arg executionId "$pending_execution_id" '
+      type == "object" and .executionId == $executionId
+      and (.eventId | type == "string" and test("^[0-9a-fA-F-]{36}$"))
       and (.seq | type == "number" and floor == . and . >= 1)
       and (.status | IN("STARTED", "COMPLETED", "FAILED", "CANCELLED"))
       and (.code | type == "string" and test("^[A-Z][A-Z0-9_]*$"))
       and (.message | type == "string" and length > 0)
+    ' >/dev/null 2>&1 <<< "$event"; then
+      printf '%s\n' "$event" >> "$valid_file"
+    elif [[ "$record_kind" == "messages" ]] && jq -e --arg executionId "$pending_execution_id" '
+      type == "object" and .executionId == $executionId
+      and (.messageId | type == "string" and test("^[0-9a-fA-F-]{36}$"))
+      and (.code | type == "string" and test("^[A-Z][A-Z0-9_]*$"))
+      and (.message | type == "string" and length > 0 and length <= 4000)
     ' >/dev/null 2>&1 <<< "$event"; then
       printf '%s\n' "$event" >> "$valid_file"
     else
@@ -116,10 +135,17 @@ for pending_file in "$OUTBOX_DIR"/*.pending.jsonl; do
     continue
   fi
 
-  max_seq="$(jq -s 'map(.seq) | max' "$valid_file")"
-  jq -s '{activeJobs:[],events:.}' "$valid_file" > "$payload_file"
+  if [[ "$record_kind" == "events" ]]; then
+    mapfile -t record_ids < <(jq -r '.eventId' "$valid_file")
+    jq -s '{activeJobs:[],events:.,messages:[]}' "$valid_file" > "$payload_file"
+    acknowledgement_key="acceptedEventIds"
+  else
+    mapfile -t record_ids < <(jq -r '.messageId' "$valid_file")
+    jq -s '{activeJobs:[],events:[],messages:.}' "$valid_file" > "$payload_file"
+    acknowledgement_key="acceptedMessageIds"
+  fi
 
-  accepted_through=""
+  all_records_accepted=false
   for callback_url in "${CALLBACK_URLS[@]}"; do
     : > "$response_file"
     set +e
@@ -130,12 +156,17 @@ for pending_file in "$OUTBOX_DIR"/*.pending.jsonl; do
     curl_status=$?
     set -e
     if (( curl_status == 0 )) && [[ "$http_code" =~ ^2[0-9][0-9]$ ]]; then
-      accepted_through="$(jq -r '.acceptedThrough // empty' "$response_file" 2>/dev/null || true)"
-      [[ "$accepted_through" =~ ^[0-9]+$ ]] && (( accepted_through >= max_seq )) && break
+      if jq -e --arg key "$acknowledgement_key" '.[$key] | type == "array"' "$response_file" >/dev/null 2>&1; then
+        all_records_accepted=true
+        for record_id in "${record_ids[@]}"; do
+          jq -e --arg key "$acknowledgement_key" --arg id "$record_id" '.[$key] | index($id) != null' "$response_file" >/dev/null 2>&1 || { all_records_accepted=false; break; }
+        done
+        [[ "$all_records_accepted" == true ]] && break
+      fi
     fi
   done
 
-  if [[ "$accepted_through" =~ ^[0-9]+$ ]] && (( accepted_through >= max_seq )); then
+  if [[ "$all_records_accepted" == true ]]; then
     rm -f "$pending_file"
     jq -r '.abortJobs[]? // empty' "$response_file" 2>/dev/null |
       while IFS= read -r abort_job; do

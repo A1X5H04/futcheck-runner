@@ -32,6 +32,11 @@ done
 WORK_DIR="${RUNNER_WORK_DIR:-${FUTCHECK_WORK_DIR:-$ROOT_DIR/.work}}"
 INPUT_DIR="${INPUT_DIR:-$(dirname "$JOB_FILE")/input}"
 OUTPUT_DIR="${OUTPUT_DIR:-$(dirname "$JOB_FILE")/output}"
+CONTROL_DIR="${RUNNER_CONTROL_DIR:-$WORK_DIR/control}"
+mkdir -p "$CONTROL_DIR"
+cp "$ROOT_DIR/runner/worker-api.sh" "$CONTROL_DIR/runner-api.sh"
+chmod 0444 "$CONTROL_DIR/runner-api.sh"
+: > "$CONTROL_DIR/messages.jsonl"
 
 ACTION_ARGS=(--job "$JOB_FILE" --input "$INPUT_DIR" --output "$OUTPUT_DIR")
 PREFLIGHT_ARGS=("${ACTION_ARGS[@]}")
@@ -41,6 +46,8 @@ export RUNNER_EXECUTION_ID="$EXECUTION_ID"
 export RUNNER_JOB_FILE="$JOB_FILE"
 export RUNNER_INPUT_DIR="$INPUT_DIR"
 export RUNNER_OUTPUT_DIR="$OUTPUT_DIR"
+export RUNNER_CONTROL_DIR="$CONTROL_DIR"
+export RUNNER_MESSAGE_FILE="$CONTROL_DIR/messages.jsonl"
 export RUNNER_PLAN_FILE="${RUNNER_PLAN_FILE:-$WORK_DIR/execution-plan.json}"
 export RUNNER_RESULT_FILE="${RUNNER_RESULT_FILE:-$OUTPUT_DIR/result.json}"
 
