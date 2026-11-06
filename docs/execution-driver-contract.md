@@ -6,6 +6,8 @@ An action variant selects a driver by name. The generic action router exports:
 - `RUNNER_JOB_FILE`
 - `RUNNER_INPUT_DIR`
 - `RUNNER_OUTPUT_DIR`
+- `RUNNER_CONTROL_DIR`
+- `RUNNER_MESSAGE_FILE`
 - `RUNNER_ACTION_ID`
 - `RUNNER_ACTION_VERSION`
 - `RUNNER_ACTION_MANIFEST`
@@ -33,8 +35,8 @@ Driver files are Bash scripts invoked by the generic executor. Adding a driver
 must not require changes to `runner/entrypoint.sh`, `runner/supervisor.sh` or
 `runner/execute.sh`.
 
-Workers that need to report a meaningful message receive a mounted
-`/runner/runner-api.sh`. A Bash worker can use:
+Drivers expose `RUNNER_CONTROL_DIR` and `RUNNER_MESSAGE_FILE` to their worker.
+The Docker driver mounts that directory as `/runner`. A Bash worker can use:
 
 ```bash
 source /runner/runner-api.sh

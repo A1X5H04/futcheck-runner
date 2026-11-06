@@ -59,8 +59,9 @@ messages are a separate reporting stream and do not alter lifecycle state.
 }
 ```
 
-The backend stores events idempotently by `(executionId, seq)` and applies state
-changes atomically before acknowledging them.
+The backend stores lifecycle events idempotently by `eventId`, validates their
+`(executionId, seq)` order, and stores worker messages idempotently by
+`messageId` before acknowledging them.
 
 ## Delivery acknowledgement
 
