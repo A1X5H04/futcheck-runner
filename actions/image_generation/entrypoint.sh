@@ -8,6 +8,13 @@ OUTPUT_DIR="/work/output"
 STARTED_EPOCH_MS="$(date +%s%3N)"
 STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 JOB_ID="unknown"
+PREFLIGHT_ONLY=false
+
+if [[ "${1:-}" == "--preflight" ]]; then
+  PREFLIGHT_ONLY=true
+  shift
+fi
+[[ $# -eq 0 ]] || { echo "Unknown action entrypoint arguments." >&2; exit 2; }
 
 mkdir -p "$OUTPUT_DIR"
 
@@ -50,10 +57,7 @@ JOB_ACTION="$(jq -r '.action' "$JOB_FILE")"
 JOB_VERSION="$(jq -r '.actionVersion' "$JOB_FILE")"
 RENDERER="$(jq -r '.payload.renderer // "svg"' "$JOB_FILE")"
 
-case "$JOB_ACTION" in
-  "$ACTION_ID"|template-image-render|template-image.render) ;;
-  *) echo "Unexpected action: $JOB_ACTION" >&2; exit 2 ;;
-esac
+[[ "$JOB_ACTION" == "$ACTION_ID" ]] || { echo "Unexpected action: $JOB_ACTION" >&2; exit 2; }
 [[ "$JOB_VERSION" == "$ACTION_VERSION" ]] || { echo "Unsupported action version: $JOB_VERSION" >&2; exit 2; }
 [[ "$RENDERER" == "$ACTION_RENDERER" ]] || { echo "Selected renderer '$RENDERER' does not match this image '$ACTION_RENDERER'." >&2; exit 2; }
 
@@ -78,6 +82,10 @@ IFS='/' read -r -a OUTPUT_PARTS <<< "$OUTPUT_PATH"
 for part in "${OUTPUT_PARTS[@]}"; do
   [[ -n "$part" && "$part" != "." && "$part" != ".." ]] || { echo "Output path traversal is not allowed." >&2; exit 2; }
 done
+if [[ "$PREFLIGHT_ONLY" == true ]]; then
+  echo "[ACTION] payload_validated"
+  exit 0
+fi
 OUTPUT_FILE="${OUTPUT_DIR}/${OUTPUT_PATH}"
 mkdir -p "$(dirname "$OUTPUT_FILE")"
 
@@ -137,5 +145,16 @@ jq -n \
   '{schemaVersion:1,jobId:$jobId,action:$action,actionVersion:$actionVersion,status:"completed",output:{files:[{path:$path,format:$format,width:$width,height:$height,bytes:$bytes,sha256:$sha256}]},execution:{startedAt:$startedAt,completedAt:$completedAt,durationMs:$durationMs},renderer:{name:$renderer,engine:$engine}}' \
   > "${OUTPUT_DIR}/.manifest.json.tmp"
 mv "${OUTPUT_DIR}/.manifest.json.tmp" "${OUTPUT_DIR}/manifest.json"
+
+# This worker owns its result payload. Publishing an artifact to an external
+# service is intentionally not a generic runner or adapter responsibility.
+jq -n \
+  --arg path "$OUTPUT_PATH" \
+  --arg format "png" \
+  --arg sha256 "$SHA256" \
+  --argjson bytes "$BYTES" \
+  --slurpfile manifest "${OUTPUT_DIR}/manifest.json" \
+  '{artifact:{path:$path,format:$format,bytes:$bytes,sha256:$sha256},manifest:($manifest[0] // {})}' \
+  > "${OUTPUT_DIR}/result.json"
 
 echo "Completed $ACTION_ID job $JOB_ID using $RENDERER."
