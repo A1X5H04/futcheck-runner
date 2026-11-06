@@ -36,6 +36,7 @@ for number in "$STALE_LOCK_SECONDS" "$STARTUP_DELIVERY_SECONDS" "$FINAL_DELIVERY
 done
 
 mkdir -p "$OUTBOX_DIR"
+command -v sha256sum >/dev/null 2>&1 || { echo "sha256sum is required." >&2; exit 2; }
 ACTIVE_FILE="$OUTBOX_DIR/$EXECUTION_ID.active"
 RUN_LOCK_DIR="$OUTBOX_DIR/$EXECUTION_ID.runlock"
 ABORT_FILE="$OUTBOX_DIR/$EXECUTION_ID.abort"
@@ -83,6 +84,12 @@ new_uuid() {
     return
   fi
   hash="$(printf '%s' "$EXECUTION_ID:$(date +%s%N):$RANDOM:$RANDOM" | sha256sum | awk '{print $1}')"
+  printf '%s-%s-4%s-8%s-%s' "${hash:0:8}" "${hash:8:4}" "${hash:13:3}" "${hash:17:3}" "${hash:20:12}"
+}
+
+uuid_from_seed() {
+  local hash
+  hash="$(printf '%s' "$1" | sha256sum | awk '{print $1}')"
   printf '%s-%s-4%s-8%s-%s' "${hash:0:8}" "${hash:8:4}" "${hash:13:3}" "${hash:17:3}" "${hash:20:12}"
 }
 
@@ -145,9 +152,8 @@ emit_event() {
 }
 
 emit_worker_message() {
-  local code="$1" message="$2"
-  local message_id timestamp metadata job_id
-  message_id="$(new_uuid)"
+  local code="$1" message="$2" message_id="$3"
+  local timestamp metadata job_id
   timestamp="$(date +%s%3N)"
   metadata="$(read_json_object "$METADATA_FILE" '{}')"
   job_id="$(current_job_id)"
@@ -161,16 +167,18 @@ emit_worker_message() {
 
 worker_message_lines=0
 drain_worker_messages() {
-  local total_lines raw code message emitted=false
+  local total_lines raw code message line_number emitted=false
   [[ -s "$WORKER_MESSAGE_FILE" ]] || return 1
   total_lines="$(wc -l < "$WORKER_MESSAGE_FILE" | tr -d ' ')"
   (( total_lines > worker_message_lines )) || return 1
   while IFS= read -r raw || [[ -n "$raw" ]]; do
+    line_number=$((worker_message_lines + 1))
+    worker_message_lines="$line_number"
     [[ -n "$raw" ]] || continue
     code="$(jq -r '.code // "WORKER_MESSAGE"' <<< "$raw" 2>/dev/null || true)"
     message="$(jq -r '.message // empty' <<< "$raw" 2>/dev/null || true)"
     [[ "$code" =~ ^[A-Z][A-Z0-9_]*$ && -n "$message" && ${#message} -le 4000 ]] || continue
-    emit_worker_message "$code" "$message"
+    emit_worker_message "$code" "$message" "$(uuid_from_seed "$EXECUTION_ID:worker-message:$line_number:$raw")"
     emitted=true
   done < <(tail -n "+$((worker_message_lines + 1))" "$WORKER_MESSAGE_FILE")
   worker_message_lines="$total_lines"
