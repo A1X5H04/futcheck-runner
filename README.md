@@ -97,8 +97,8 @@ runner echoes it unchanged.
 Required GitHub repository configuration:
 
 - `FUTCHECK_JOB_API_URL` variable: backend base URL.
-- `FUTCHECK_CALLBACK_URL` variable: `/api/workflow/runner/webhook/callback`.
-- `FUTCHECK_ALLOWED_CALLBACK_HOSTS` variable: exact callback hostname allowlist.
+- `WEBHOOK_CALLBACK_URL` variable: `/api/workflow/runner/webhook/callback`.
+- `WEBHOOK_ALLOWED_HOSTS` variable: exact callback hostname allowlist.
 - `FUTCHECK_ALLOWED_JOB_HOSTS` variable: exact backend hostname allowlist.
 - `FUTCHECK_JOB_TOKEN` secret: same value as the backend's
   `WORKFLOW_RUNNER_SECRET`.
@@ -110,12 +110,13 @@ Before GitHub starts a worker, the generic OS entrypoint validates the job and
 action, then the supervisor validates the HTTPS control URL, token, and callback
 hostname allowlist. It synchronously delivers `STARTED` / `RUNNER_STARTED`; if
 that acknowledgement fails, the worker is refused and the workflow fails. The
-per-run `control_url` workflow input takes priority over `FUTCHECK_CALLBACK_URL`;
+per-run `control_url` workflow input takes priority over `WEBHOOK_CALLBACK_URL`;
 the latter remains a fallback. A broken callback cannot receive its own refusal
 event, so that failure is retained in the outbox and visible in the workflow result.
 
-The outbox provides at-least-once delivery. The backend deduplicates events by
-execution ID and sequence, then returns `acceptedThrough`. The job
+The outbox provides at-least-once delivery. The backend deduplicates lifecycle
+events by `eventId` and worker messages by `messageId`, then returns the exact
+accepted ID lists. The job
 token is never mounted into an action container or written to `job.json`.
 The outbox retains lifecycle events, a terminal state journal, and logs. On
 GitHub, that recovery evidence is uploaded as a seven-day artifact even when
@@ -138,7 +139,8 @@ The executor discovers actions by reading `actions/*/action.json`. There is no s
 See [Action authoring](docs/action-authoring.md), [Execution contract](docs/execution-contract.md),
 [Execution driver contract](docs/execution-driver-contract.md), and
 [Platform adapter contract](docs/platform-adapter-contract.md). Backend control
-messages are defined in [Runner control protocol](docs/runner-control.md).
+events, worker messages, and acknowledgements are defined in
+[Runner control protocol](docs/runner-control.md).
 
 ## Security notes
 

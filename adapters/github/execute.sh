@@ -18,13 +18,13 @@ export RUNNER_PLATFORM="github"
 export RUNNER_PLATFORM_RUN_ID="${GITHUB_RUN_ID:-}"
 export RUNNER_TOKEN="${RUNNER_TOKEN:-${FUTCHECK_JOB_TOKEN:-}}"
 export RUNNER_REQUIRE_CALLBACK="true"
-export RUNNER_ALLOWED_CALLBACK_HOSTS="${FUTCHECK_ALLOWED_CALLBACK_HOSTS:-${FUTCHECK_ALLOWED_JOB_HOSTS:-}}"
+export RUNNER_ALLOWED_CALLBACK_HOSTS="${WEBHOOK_ALLOWED_HOSTS:-${FUTCHECK_ALLOWED_JOB_HOSTS:-}}"
 export RUNNER_CONTROL_URL="${FUTCHECK_CONTROL_URL:-}"
-if [[ -z "${FUTCHECK_CALLBACK_URL:-}" && -n "${FUTCHECK_JOB_API_URL:-}" ]]; then
+if [[ -z "${WEBHOOK_CALLBACK_URL:-}" && -n "${FUTCHECK_JOB_API_URL:-}" ]]; then
   if [[ "$FUTCHECK_JOB_API_URL" =~ /jobs/?$ ]]; then
-    export FUTCHECK_CALLBACK_URL="${FUTCHECK_JOB_API_URL%/jobs*}/webhook/callback"
+    export WEBHOOK_CALLBACK_URL="${FUTCHECK_JOB_API_URL%/jobs*}/webhook/callback"
   else
-    export FUTCHECK_CALLBACK_URL="${FUTCHECK_JOB_API_URL%/}/api/workflow/runner/webhook/callback"
+    export WEBHOOK_CALLBACK_URL="${FUTCHECK_JOB_API_URL%/}/api/workflow/runner/webhook/callback"
   fi
 fi
 

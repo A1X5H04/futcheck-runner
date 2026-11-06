@@ -59,8 +59,8 @@ jobs:
           FUTCHECK_ALLOWED_JOB_HOSTS: ${{ vars.FUTCHECK_ALLOWED_JOB_HOSTS }}
           FUTCHECK_RUNNER_METADATA: ${{ inputs.runner_metadata }}
           FUTCHECK_CONTROL_URL: ${{ inputs.control_url }}
-          FUTCHECK_CALLBACK_URL: ${{ vars.FUTCHECK_CALLBACK_URL }}
-          FUTCHECK_ALLOWED_CALLBACK_HOSTS: ${{ vars.FUTCHECK_ALLOWED_CALLBACK_HOSTS }}
+          WEBHOOK_CALLBACK_URL: ${{ vars.WEBHOOK_CALLBACK_URL }}
+          WEBHOOK_ALLOWED_HOSTS: ${{ vars.WEBHOOK_ALLOWED_HOSTS }}
           FUTCHECK_WORK_DIR: ${{ runner.temp }}/futcheck-work
         run: ./adapters/github/execute.sh
 
