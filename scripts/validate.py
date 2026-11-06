@@ -33,7 +33,9 @@ def main() -> int:
 
     schema_paths = sorted((ROOT / "contracts" / "v1").glob("*.schema.json"))
     assert {p.name for p in schema_paths} == {
-        "action.schema.json", "job.schema.json", "result.schema.json"
+        "action.schema.json", "delivery-request.schema.json",
+        "delivery-response.schema.json", "event.schema.json", "job.schema.json",
+        "result.schema.json"
     }, "Missing versioned contract schema."
     schemas = {path.name: read_json(path) for path in schema_paths}
 
@@ -56,6 +58,9 @@ def main() -> int:
         action_dir = manifest_path.parent
         assert safe_relative_path(manifest["execution"]["entrypoint"]), f"Unsafe entrypoint: {action_id}"
         assert (action_dir / manifest["execution"]["entrypoint"]).is_file(), f"Missing entrypoint: {action_id}"
+        preflight = manifest["execution"].get("preflight", manifest["execution"]["entrypoint"])
+        assert safe_relative_path(preflight), f"Unsafe preflight: {action_id}"
+        assert (action_dir / preflight).is_file(), f"Missing preflight: {action_id}"
         payload_schema_path = action_dir / manifest["input"]["payloadSchema"]
         payload_schema = read_json(payload_schema_path)
         if Draft202012Validator is not None:
@@ -63,14 +68,24 @@ def main() -> int:
         variants = manifest["execution"]["variants"]
         assert manifest["execution"]["defaultVariant"] in variants, f"Unknown default variant: {action_id}"
         for variant_name, variant in variants.items():
-            dockerfile = variant["dockerfile"]
-            assert safe_relative_path(dockerfile), f"Unsafe Dockerfile path: {action_id}/{variant_name}"
-            assert (action_dir / dockerfile).is_file(), f"Missing Dockerfile: {action_id}/{variant_name}"
+            driver = variant.get("driver")
+            assert isinstance(driver, str) and re.fullmatch(r"[a-z][a-z0-9_-]{0,31}", driver), f"Invalid driver: {action_id}/{variant_name}"
+            assert (ROOT / "runner" / "drivers" / f"{driver}.sh").is_file(), f"Missing driver: {action_id}/{variant_name}"
+            if driver == "docker":
+                dockerfile = variant.get("dockerfile")
+                assert safe_relative_path(dockerfile), f"Unsafe Dockerfile path: {action_id}/{variant_name}"
+                assert (action_dir / dockerfile).is_file(), f"Missing Dockerfile: {action_id}/{variant_name}"
             resources = variant["resources"]
-            assert isinstance(resources.get("network"), bool), f"Missing network flag: {action_id}/{variant_name}"
-            assert float(resources.get("cpus", 0)) > 0, f"Invalid CPU limit: {action_id}/{variant_name}"
+            assert isinstance(resources.get("timeoutSeconds"), int) and resources["timeoutSeconds"] > 0, f"Invalid timeout: {action_id}/{variant_name}"
+            assert isinstance(resources.get("maxInputBytes"), int) and resources["maxInputBytes"] > 0, f"Invalid input limit: {action_id}/{variant_name}"
+            assert isinstance(resources.get("maxOutputBytes"), int) and resources["maxOutputBytes"] > 0, f"Invalid output limit: {action_id}/{variant_name}"
+            if driver == "docker":
+                assert isinstance(resources.get("network"), bool), f"Missing network flag: {action_id}/{variant_name}"
+                assert float(resources.get("cpus", 0)) > 0, f"Invalid CPU limit: {action_id}/{variant_name}"
+                assert isinstance(resources.get("memory"), str) and resources["memory"], f"Missing memory limit: {action_id}/{variant_name}"
         manifests[action_id] = manifest
         action_dirs[action_id] = action_dir
+        assert (action_dir / "test.sh").is_file(), f"Missing action conformance test: {action_id}"
 
     assert manifests, "No actions found."
 
@@ -100,12 +115,11 @@ def main() -> int:
     assert not safe_relative_path("/tmp/escape.png")
     assert not safe_relative_path("nested/../escape.png")
 
-    svg_template = ROOT / "actions/image_generation/templates/feature-announcement/template.svg"
-    html_template = ROOT / "actions/image_generation/templates/feature-announcement/index.html"
-    assert svg_template.is_file() and html_template.is_file()
-    for token in ("{{TITLE}}", "{{SUBTITLE}}", "{{EYEBROW}}", "{{ACCENT}}"):
-        assert token in svg_template.read_text(encoding="utf-8"), f"Missing SVG token {token}"
-        assert token in html_template.read_text(encoding="utf-8"), f"Missing HTML token {token}"
+    adapter_dirs = sorted(path for path in (ROOT / "adapters").iterdir() if path.is_dir())
+    assert adapter_dirs, "No platform adapters found."
+    for adapter_dir in adapter_dirs:
+        assert (adapter_dir / "execute.sh").is_file(), f"Missing adapter execute hook: {adapter_dir.name}"
+        assert (adapter_dir / "prepare-job.sh").is_file(), f"Missing adapter prepare hook: {adapter_dir.name}"
 
     if Draft202012Validator is None:
         print("Note: python-jsonschema is not installed; ran structural checks only.")

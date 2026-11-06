@@ -13,14 +13,14 @@ while IFS= read -r -d '' file; do
   bash -n "$file"
 done < <(find runner adapters scripts actions tests -type f -name '*.sh' -print0)
 
-./tests/test-executor-routing.sh
-./tests/test-supervisor.sh
-./tests/test-dispatcher.sh
+bash ./tests/test-executor-routing.sh
+bash ./tests/test-supervisor.sh
+bash ./tests/test-dispatcher.sh
+bash ./tests/test-reporting-flow.sh
 
-if command -v node >/dev/null 2>&1; then
-  node --check actions/image_generation/src/render-playwright.mjs
-else
-  echo "Node.js is not installed locally; skipping the optional Playwright script syntax check."
-fi
+for action_test in actions/*/test.sh; do
+  [[ -e "$action_test" ]] || continue
+  bash "$action_test"
+done
 
 echo "Static validation passed. Docker rendering has not been run by this script."
