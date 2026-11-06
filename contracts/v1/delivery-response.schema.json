@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://futcheck.com/runner/contracts/v1/delivery-response.schema.json",
+  "title": "Futcheck Runner Delivery Acknowledgement",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["acceptedThrough"],
+  "properties": {
+    "acceptedThrough": { "type": "integer", "minimum": 0 },
+    "abortJobs": {
+      "type": "array",
+      "items": { "type": "string", "format": "uuid" },
+      "uniqueItems": true,
+      "default": []
+    }
+  }
+}

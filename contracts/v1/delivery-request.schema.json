@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://futcheck.com/runner/contracts/v1/delivery-request.schema.json",
+  "title": "Futcheck Runner Delivery Request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["activeJobs", "events"],
+  "properties": {
+    "activeJobs": {
+      "type": "array",
+      "items": { "type": "string", "format": "uuid" },
+      "uniqueItems": true
+    },
+    "events": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "event.schema.json" }
+    }
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://futcheck.com/runner/contracts/v1/event.schema.json",
+  "title": "Futcheck Runner Event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["executionId", "jobId", "attempt", "platform", "platformRunId", "seq", "timestamp", "status", "phase", "code", "message", "logs", "result", "error", "metadata"],
+  "properties": {
+    "executionId": { "type": "string", "format": "uuid" },
+    "jobId": { "type": "string", "minLength": 1 },
+    "attempt": { "type": "integer", "minimum": 1 },
+    "platform": { "type": "string", "minLength": 1 },
+    "platformRunId": { "type": "string" },
+    "seq": { "type": "integer", "minimum": 1 },
+    "timestamp": { "type": "integer", "minimum": 0 },
+    "status": { "enum": ["STARTED", "COMPLETED", "FAILED", "CANCELLED"] },
+    "phase": { "type": "string" },
+    "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+    "message": { "type": "string", "minLength": 1 },
+    "logs": { "type": "string" },
+    "result": { "type": ["object", "null"] },
+    "error": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "category", "message"],
+          "properties": {
+            "code": { "type": "integer" },
+            "category": { "type": "string" },
+            "message": { "type": "string" }
+          }
+        }
+      ]
+    },
+    "metadata": { "type": "object" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "STARTED" } } },
+      "then": { "properties": { "result": { "type": "null" }, "error": { "type": "null" } } }
+    },
+    {
+      "if": { "properties": { "status": { "const": "COMPLETED" } } },
+      "then": { "properties": { "result": { "type": "object" }, "error": { "type": "null" } } }
+    },
+    {
+      "if": { "properties": { "status": { "enum": ["FAILED", "CANCELLED"] } } },
+      "then": { "properties": { "result": { "type": "null" }, "error": { "type": "object" } } }
+    }
+  ]
+}
