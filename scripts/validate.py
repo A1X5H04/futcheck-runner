@@ -35,7 +35,7 @@ def main() -> int:
     assert {p.name for p in schema_paths} == {
         "action.schema.json", "delivery-request.schema.json",
         "delivery-response.schema.json", "event.schema.json", "job.schema.json",
-        "result.schema.json"
+        "result.schema.json", "worker-message.schema.json"
     }, "Missing versioned contract schema."
     schemas = {path.name: read_json(path) for path in schema_paths}
 

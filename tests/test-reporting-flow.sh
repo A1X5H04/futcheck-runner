@@ -31,8 +31,9 @@ if [[ "${FUTCHECK_FAKE_CURL_MODE:-success}" == "fail" || ( "${FUTCHECK_FAKE_CURL
   printf '{"error":"unavailable"}' > "$output"
   printf '503'
 else
-  accepted="$(jq '[.events[].seq] | max' "$payload")"
-  printf '{"acceptedThrough":%s,"abortJobs":[]}' "$accepted" > "$output"
+  event_ids="$(jq -c '[.events[].eventId]' "$payload")"
+  message_ids="$(jq -c '[.messages[].messageId]' "$payload")"
+  printf '{"acceptedEventIds":%s,"acceptedMessageIds":%s,"abortJobs":[]}' "$event_ids" "$message_ids" > "$output"
   printf '200'
 fi
 CURL
@@ -93,7 +94,7 @@ rm -rf "$TEMP_DIR/captures"
 mkdir -p "$TEMP_DIR/captures"
 env "${common_env[@]}" FUTCHECK_FAKE_CURL_MODE=primary_fails \
   RUNNER_CONTROL_URL=https://primary.invalid/callback \
-  FUTCHECK_CALLBACK_URL=https://example.invalid/callback \
+  WEBHOOK_CALLBACK_URL=https://example.invalid/callback \
   RUNNER_ALLOWED_CALLBACK_HOSTS=primary.invalid,example.invalid \
   RUNNER_WORK_DIR="$TEMP_DIR/fallback" \
   "$ROOT_DIR/runner/supervisor.sh" "$FALLBACK_ID" bash -c 'exit 0'

@@ -20,6 +20,15 @@ jq -e -s '
 ' "$TEMP_DIR/outbox/$JOB_ID.jsonl" >/dev/null
 jq -e '.seq == 2 and .code == "JOB_COMPLETED"' "$TEMP_DIR/outbox/$JOB_ID.state.json" >/dev/null
 
+RUNNER_MESSAGE_FILE="$TEMP_DIR/worker-messages.jsonl" bash -c '
+  source "$1"
+  runner.send "Worker reached a meaningful checkpoint" WORKER_MESSAGE
+' _ "$ROOT_DIR/runner/worker-api.sh"
+RUNNER_WORK_DIR="$TEMP_DIR/messages" RUNNER_MESSAGE_FILE="$TEMP_DIR/worker-messages.jsonl" \
+  "$ROOT_DIR/runner/supervisor.sh" "$JOB_ID" bash -c 'sleep 1'
+jq -e -s 'length == 1 and .[0].code == "WORKER_MESSAGE" and .[0].message == "Worker reached a meaningful checkpoint"' \
+  "$TEMP_DIR/messages/outbox/$JOB_ID.messages.jsonl" >/dev/null
+
 if RUNNER_WORK_DIR="$TEMP_DIR/failure" \
   "$ROOT_DIR/runner/supervisor.sh" "$JOB_ID" bash -c 'echo boom; exit 7'; then
   echo "Expected the failing worker status to be preserved." >&2

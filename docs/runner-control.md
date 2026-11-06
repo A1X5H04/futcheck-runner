@@ -10,6 +10,7 @@ platform reconciliation explicit.
 
 ```json
 {
+  "eventId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   "executionId": "11111111-1111-4111-8111-111111111111",
   "jobId": "social-001",
   "attempt": 1,
@@ -32,7 +33,9 @@ platform reconciliation explicit.
 
 ## Events
 
-The Runner emits no progress or heartbeat events.
+The Runner emits no automatic progress or heartbeat events. A worker may
+explicitly send a meaningful user-facing message through the worker API; those
+messages are a separate reporting stream and do not alter lifecycle state.
 
 | Status | Code | Meaning |
 | --- | --- | --- |
@@ -51,7 +54,8 @@ The Runner emits no progress or heartbeat events.
 ```json
 {
   "activeJobs": [],
-  "events": []
+  "events": [],
+  "messages": []
 }
 ```
 
@@ -64,27 +68,29 @@ For each single-execution batch, the backend responds:
 
 ```json
 {
-  "acceptedThrough": 2,
+  "acceptedEventIds": ["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"],
+  "acceptedMessageIds": [],
   "abortJobs": []
 }
 ```
 
-`acceptedThrough` is required. It is the highest sequence durably stored for the
-execution. The Runner deletes a pending batch only when this value covers the
-batch's highest sequence. Duplicate delivery must return the previously accepted
-sequence, making retries safe.
+The response explicitly lists the stored event and worker-message IDs. The
+Runner deletes only the one immutable batch whose every ID appears in its
+corresponding acknowledgement list. Duplicate delivery returns the previously
+accepted IDs, making retries safe without a range acknowledgement deleting an
+unrelated batch.
 
-The backend advances `acceptedThrough` only across a contiguous sequence. Event
-storage and execution-state mutation occur in one transaction. A terminal state
-is idempotent: redelivery of the same `(executionId, seq)` is accepted, while a
-different later terminal outcome does not overwrite the first accepted terminal
-outcome.
+Event storage and execution-state mutation occur in one transaction. The backend
+deduplicates events by `eventId` and messages by `messageId`; it also preserves
+the `(executionId, seq)` lifecycle order. A terminal state is immutable:
+redelivery of the same event is accepted, while a different later terminal
+outcome does not overwrite the first accepted terminal outcome.
 
 ## Endpoint selection
 
 `RUNNER_CONTROL_URL` supplied for the execution is tried first. If it is invalid,
 expired or unavailable, the dispatcher tries the configured
-`FUTCHECK_CALLBACK_URL` fallback. Both must match the callback hostname allowlist
+`WEBHOOK_CALLBACK_URL` fallback. Both must match the callback hostname allowlist
 and use the single `RUNNER_TOKEN`.
 
 If no startup event arrives, or a terminal event misses its backend deadline, the

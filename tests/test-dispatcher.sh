@@ -25,15 +25,16 @@ if [[ "${FUTCHECK_FAKE_CURL_MODE:-success}" == "fail" ]]; then
   printf '503'
   exit 0
 fi
-accepted="$(jq '[.events[].seq] | max' "$payload")"
-printf '{"acceptedThrough":%s,"abortJobs":[]}' "$accepted" > "$output"
+event_ids="$(jq -c '[.events[].eventId]' "$payload")"
+message_ids="$(jq -c '[.messages[].messageId]' "$payload")"
+printf '{"acceptedEventIds":%s,"acceptedMessageIds":%s,"abortJobs":[]}' "$event_ids" "$message_ids" > "$output"
 printf '200'
 CURL
 chmod +x "$TEMP_DIR/bin/curl"
 
 event() {
   local seq="$1"
-  printf '{"executionId":"%s","jobId":"job","attempt":1,"seq":%s,"timestamp":1,"status":"STARTED","phase":"test","code":"TEST","message":"test","logs":"","result":null,"error":null,"metadata":{}}\n' "$EXECUTION_ID" "$seq"
+  printf '{"eventId":"%08d-1111-4111-8111-111111111111","executionId":"%s","jobId":"job","attempt":1,"seq":%s,"timestamp":1,"status":"STARTED","phase":"test","code":"TEST","message":"test","logs":"","result":null,"error":null,"metadata":{}}\n' "$seq" "$EXECUTION_ID" "$seq"
 }
 
 event 1 > "$TEMP_DIR/work/outbox/$EXECUTION_ID.jsonl"

@@ -71,9 +71,14 @@ Only meaningful events are generated:
 1. `STARTED / RUNNER_STARTED`, after platform preparation and action preflight.
 2. Exactly one terminal `COMPLETED`, `FAILED` or `CANCELLED` event.
 
+Workers may additionally request a user-facing message through `runner.send`.
+Those messages are durable but are not lifecycle events and are never generated
+automatically by the Runner.
+
 Every event is appended before delivery. The dispatcher atomically claims source
 events into uniquely named immutable pending batches. A batch is deleted only
-when the backend acknowledges a sequence at or beyond that batch's final event.
+when the backend explicitly acknowledges every event or message ID in that
+specific batch.
 Failed batches remain available for retry and platform recovery artifacts.
 
 The backend still owns final reconciliation when an entire execution platform is

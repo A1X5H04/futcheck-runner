@@ -32,3 +32,14 @@ digests after every successful driver execution.
 Driver files are Bash scripts invoked by the generic executor. Adding a driver
 must not require changes to `runner/entrypoint.sh`, `runner/supervisor.sh` or
 `runner/execute.sh`.
+
+Workers that need to report a meaningful message receive a mounted
+`/runner/runner-api.sh`. A Bash worker can use:
+
+```bash
+source /runner/runner-api.sh
+runner.send "Downloaded source data" WORKER_MESSAGE
+```
+
+Messages are durable and delivered separately from lifecycle events. They are
+worker-requested only; the Runner never emits automatic progress updates.
