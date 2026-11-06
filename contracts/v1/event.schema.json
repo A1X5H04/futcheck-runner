@@ -4,8 +4,9 @@
   "title": "Futcheck Runner Event",
   "type": "object",
   "additionalProperties": false,
-  "required": ["executionId", "jobId", "attempt", "platform", "platformRunId", "seq", "timestamp", "status", "phase", "code", "message", "logs", "result", "error", "metadata"],
+  "required": ["eventId", "executionId", "jobId", "attempt", "platform", "platformRunId", "seq", "timestamp", "status", "phase", "code", "message", "logs", "result", "error", "metadata"],
   "properties": {
+    "eventId": { "type": "string", "format": "uuid" },
     "executionId": { "type": "string", "format": "uuid" },
     "jobId": { "type": "string", "minLength": 1 },
     "attempt": { "type": "integer", "minimum": 1 },
