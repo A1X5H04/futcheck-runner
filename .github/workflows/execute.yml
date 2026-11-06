@@ -3,6 +3,15 @@ name: Futcheck Runner
 on:
   workflow_dispatch:
     inputs:
+      execution_id:
+        description: Backend execution UUID used for reporting and idempotency.
+        required: true
+        type: string
+      attempt:
+        description: Backend execution attempt number.
+        required: false
+        default: 1
+        type: number
       job_json:
         description: Complete job JSON for small jobs and testing. Use job_id for stored jobs.
         required: false
@@ -15,12 +24,12 @@ on:
         description: Workflow job key for correlation and callback.
         required: false
         type: string
-      callback_url:
-        description: Webhook callback URL to report completion and output URLs back to Futcheck.
-        required: false
-        type: string
       runner_metadata:
         description: Opaque backend correlation metadata echoed in runner events.
+        required: false
+        type: string
+      control_url:
+        description: Backend control URL for this execution; must match the configured hostname allowlist.
         required: false
         type: string
 
@@ -41,13 +50,17 @@ jobs:
         id: run_action
         env:
           FUTCHECK_JOB_JSON: ${{ inputs.job_json }}
+          FUTCHECK_EXECUTION_ID: ${{ inputs.execution_id }}
+          FUTCHECK_ATTEMPT: ${{ inputs.attempt }}
           FUTCHECK_JOB_ID: ${{ inputs.job_id }}
           FUTCHECK_JOB_KEY: ${{ inputs.job_key }}
           FUTCHECK_JOB_API_URL: ${{ vars.FUTCHECK_JOB_API_URL }}
           FUTCHECK_JOB_TOKEN: ${{ secrets.FUTCHECK_JOB_TOKEN }}
           FUTCHECK_ALLOWED_JOB_HOSTS: ${{ vars.FUTCHECK_ALLOWED_JOB_HOSTS }}
           FUTCHECK_RUNNER_METADATA: ${{ inputs.runner_metadata }}
-          FUTCHECK_CALLBACK_URL: ${{ inputs.callback_url || vars.FUTCHECK_CALLBACK_URL }}
+          FUTCHECK_CONTROL_URL: ${{ inputs.control_url }}
+          FUTCHECK_CALLBACK_URL: ${{ vars.FUTCHECK_CALLBACK_URL }}
+          FUTCHECK_ALLOWED_CALLBACK_HOSTS: ${{ vars.FUTCHECK_ALLOWED_CALLBACK_HOSTS }}
           FUTCHECK_WORK_DIR: ${{ runner.temp }}/futcheck-work
         run: ./adapters/github/execute.sh
 
@@ -57,5 +70,14 @@ jobs:
         with:
           name: futcheck-runner-output-${{ github.run_id }}
           path: ${{ runner.temp }}/futcheck-work/output/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Upload runner recovery state
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: futcheck-runner-state-${{ github.run_id }}
+          path: ${{ runner.temp }}/futcheck-work/outbox/
           if-no-files-found: ignore
           retention-days: 7

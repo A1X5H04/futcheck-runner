@@ -1,0 +1,48 @@
+name: Validate Futcheck Runner
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-and-svg-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install contract validator
+        run: python3 -m pip install --disable-pip-version-check jsonschema==4.23.0
+
+      - name: Run static validation and mocked lifecycle tests
+        run: ./scripts/validate.sh
+
+      - name: Render SVG action in Docker
+        env:
+          FUTCHECK_WORK_DIR: ${{ runner.temp }}/svg-run
+          RUNNER_EXECUTION_ID: 11111111-1111-4111-8111-111111111111
+        run: ./scripts/run-local.sh examples/jobs/render-svg.json
+
+      - name: Verify rendered output
+        run: |
+          test -s "$RUNNER_TEMP/svg-run/output/post.png"
+          jq -e '.status == "completed" and .output.files[0].path == "post.png"' "$RUNNER_TEMP/svg-run/output/manifest.json"
+
+      - name: Render Playwright action in Docker
+        env:
+          FUTCHECK_WORK_DIR: ${{ runner.temp }}/playwright-run
+          RUNNER_EXECUTION_ID: 22222222-2222-4222-8222-222222222222
+        run: ./scripts/run-local.sh examples/jobs/render-playwright.json
+
+      - name: Verify Playwright output
+        run: |
+          test -s "$RUNNER_TEMP/playwright-run/output/post.png"
+          jq -e '.status == "completed" and .renderer.name == "playwright"' "$RUNNER_TEMP/playwright-run/output/manifest.json"
